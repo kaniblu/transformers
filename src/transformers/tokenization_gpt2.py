@@ -14,17 +14,16 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-
 import json
 import logging
 import os
 from functools import lru_cache
+from typing import List, Optional
 
 import regex as re
 from tokenizers import ByteLevelBPETokenizer
 
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
-
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +71,8 @@ def bytes_to_unicode():
     To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     """
     bs = (
-        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+            list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(
+        range(ord("®"), ord("ÿ") + 1))
     )
     cs = bs[:]
     n = 0
@@ -137,14 +137,14 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
-        self,
-        vocab_file,
-        merges_file,
-        errors="replace",
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
-        **kwargs
+            self,
+            vocab_file,
+            merges_file,
+            errors="replace",
+            unk_token="<|endoftext|>",
+            bos_token="<|endoftext|>",
+            eos_token="<|endoftext|>",
+            **kwargs
     ):
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
 
@@ -162,6 +162,8 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        self.pad_token = self.eos_token
+        self.cls_token = self.bos_token
 
     @property
     def vocab_size(self):
@@ -272,9 +274,66 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         return vocab_file, merge_file
 
     def prepare_for_tokenization(self, text, **kwargs):
-        if "add_prefix_space" in kwargs and kwargs["add_prefix_space"]:
-            return " " + text
-        return text
+        return " " + text.lstrip()
+
+    def build_inputs_with_special_tokens(
+            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens.
+        A BERT sequence has the following format:
+
+        - single sequence: ``[CLS] X [SEP]``
+        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
+        bos = [self.bos_token_id]
+        eos = [self.eos_token_id]
+        if token_ids_1 is None:
+            return bos + token_ids_0 + eos
+        return bos + token_ids_0 + eos + token_ids_1 + eos
+
+    def num_special_tokens_to_add(self, pair=False):
+        return 3 if pair else 2
+
+    def create_token_type_ids_from_sequences(
+            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        A BERT sequence pair mask has the following format:
+
+        ::
+
+            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+            | first sequence    | second sequence |
+
+        if token_ids_1 is None, only returns the first portion of the mask (0's).
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of ids.
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            sequence(s).
+        """
+        eos = [self.eos_token_id]
+        bos = [self.bos_token_id]
+        if token_ids_1 is None:
+            return len(bos + token_ids_0 + eos) * [0]
+        return len(bos + token_ids_0 + eos) * [0] + len(token_ids_1 + eos) * [1]
 
 
 class GPT2TokenizerFast(PreTrainedTokenizerFast):
@@ -324,15 +383,15 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
-        self,
-        vocab_file,
-        merges_file,
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
-        add_prefix_space=False,
-        trim_offsets=True,
-        **kwargs
+            self,
+            vocab_file,
+            merges_file,
+            unk_token="<|endoftext|>",
+            bos_token="<|endoftext|>",
+            eos_token="<|endoftext|>",
+            add_prefix_space=False,
+            trim_offsets=True,
+            **kwargs
     ):
         super().__init__(
             ByteLevelBPETokenizer(
