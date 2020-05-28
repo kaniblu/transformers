@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import itertools
 from functools import partial
 from multiprocessing import Pool, cpu_count
 
@@ -147,18 +148,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
             max_seq_length - len(truncated_query) - sequence_pair_added_tokens,
         )
 
-        if tokenizer.pad_token_id in encoded_dict["input_ids"]:
-            if tokenizer.padding_side == "right":
-                non_padded_ids = encoded_dict["input_ids"][: encoded_dict["input_ids"].index(tokenizer.pad_token_id)]
-            else:
-                last_padding_id_position = (
-                    len(encoded_dict["input_ids"]) - 1 - encoded_dict["input_ids"][::-1].index(tokenizer.pad_token_id)
-                )
-                non_padded_ids = encoded_dict["input_ids"][last_padding_id_position + 1 :]
-
-        else:
-            non_padded_ids = encoded_dict["input_ids"]
-
+        non_padded_ids = itertools.compress(encoded_dict["input_ids"], encoded_dict["attention_mask"])
         tokens = tokenizer.convert_ids_to_tokens(non_padded_ids)
 
         token_to_orig_map = {}
