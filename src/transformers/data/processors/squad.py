@@ -103,7 +103,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
     all_doc_tokens = []
     for (i, token) in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
-        sub_tokens = tokenizer.tokenize(token)
+        sub_tokens = tokenizer.tokenize(token.strip(), add_prefix_space=True)
         for sub_token in sub_tokens:
             tok_to_orig_index.append(i)
             all_doc_tokens.append(sub_token)
@@ -121,7 +121,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
 
     spans = []
 
-    truncated_query = tokenizer.encode(example.question_text, add_special_tokens=False, max_length=max_query_length)
+    truncated_query = tokenizer.encode(example.question_text.strip(), add_special_tokens=False, max_length=max_query_length, add_prefix_space=True)
     sequence_added_tokens = (
         tokenizer.max_len - tokenizer.max_len_single_sentence + 1
         if "roberta" in str(type(tokenizer)) or "camembert" in str(type(tokenizer))
