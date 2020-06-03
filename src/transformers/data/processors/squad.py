@@ -193,7 +193,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
             index = (
                 j
                 if tokenizer.padding_side == "left"
-                else spans[doc_span_index]["truncated_query_with_special_tokens_length"] + j
+                else spans[doc_span_index]["paragraph_start_position"] + j
             )
             spans[doc_span_index]["token_is_max_context"][index] = is_max_context
 
