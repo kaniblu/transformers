@@ -84,7 +84,7 @@ def _is_whitespace(c):
     return False
 
 
-def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_query_length, is_training):
+def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_query_length, is_training, mirror_context=False):
     features = []
     if is_training and not example.is_impossible:
         # Get start and end position
@@ -147,13 +147,29 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
             len(all_doc_tokens) - len(spans) * doc_stride,
             max_seq_length - len(truncated_query) - sequence_pair_added_tokens,
         )
+        paragraph_start_pos = len(truncated_query) + sequence_added_tokens if tokenizer.padding_side == "right" else 0
+        non_padded_ids = list(itertools.compress(encoded_dict["input_ids"], encoded_dict["attention_mask"]))
 
-        non_padded_ids = itertools.compress(encoded_dict["input_ids"], encoded_dict["attention_mask"])
+        # TODO: improve efficiency
+        if mirror_context:
+            truncated_doc_ids = non_padded_ids[paragraph_start_pos:paragraph_start_pos + paragraph_len]
+            encoded_dict_mirror = tokenizer.encode_plus(
+                tokenizer.encode(truncated_doc_ids, truncated_query) if tokenizer.padding_side == "right" else truncated_doc_ids,
+                truncated_doc_ids if tokenizer.padding_side == "right" else tokenizer.encode(truncated_query, truncated_doc_ids),
+                pad_to_max_length=True,
+                truncation_strategy="only_second" if tokenizer.padding_side == "right" else "only_first",
+                return_token_type_ids=True,
+            )
+            if tokenizer.padding_side == "right":
+                paragraph_start_pos += len(truncated_doc_ids) + sequence_pair_added_tokens
+            for k in ("input_ids", "attention_mask", "token_type_ids"):
+                encoded_dict[k] = encoded_dict_mirror[k]
+            non_padded_ids = list(itertools.compress(encoded_dict["input_ids"], encoded_dict["attention_mask"]))
+
         tokens = tokenizer.convert_ids_to_tokens(non_padded_ids)
-
         token_to_orig_map = {}
         for i in range(paragraph_len):
-            index = len(truncated_query) + sequence_added_tokens + i if tokenizer.padding_side == "right" else i
+            index = paragraph_start_pos + i
             token_to_orig_map[index] = tok_to_orig_index[len(spans) * doc_stride + i]
 
         encoded_dict["paragraph_len"] = paragraph_len
@@ -163,6 +179,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
         encoded_dict["token_is_max_context"] = {}
         encoded_dict["start"] = len(spans) * doc_stride
         encoded_dict["length"] = paragraph_len
+        encoded_dict["paragraph_start_position"] = paragraph_start_pos
 
         spans.append(encoded_dict)
 
@@ -224,7 +241,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
                 if tokenizer.padding_side == "left":
                     doc_offset = 0
                 else:
-                    doc_offset = len(truncated_query) + sequence_added_tokens
+                    doc_offset = span["paragraph_start_position"]
 
                 start_position = tok_start_position - doc_start + doc_offset
                 end_position = tok_end_position - doc_start + doc_offset
@@ -266,6 +283,7 @@ def squad_convert_examples_to_features(
     return_dataset=False,
     threads=1,
     tqdm_enabled=True,
+    mirror_context=False,
 ):
     """
     Converts a list of examples into a list of features that can be directly given as input to a model.
@@ -312,6 +330,7 @@ def squad_convert_examples_to_features(
             doc_stride=doc_stride,
             max_query_length=max_query_length,
             is_training=is_training,
+            mirror_context=mirror_context
         )
         features = list(
             tqdm(

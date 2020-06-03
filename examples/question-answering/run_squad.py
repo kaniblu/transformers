@@ -461,6 +461,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
             is_training=not evaluate,
             return_dataset="pt",
             threads=args.threads,
+            mirror_context=args.mirror_context
         )
 
         if args.local_rank in [-1, 0]:
@@ -617,6 +618,11 @@ def main():
         type=int,
         help="The maximum length of an answer that can be generated. This is needed because the start "
         "and end predictions are not conditioned on one another.",
+    )
+    parser.add_argument(
+        "--mirror_context",
+        default=0,
+        type=int
     )
     parser.add_argument(
         "--verbose_logging",
