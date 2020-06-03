@@ -773,7 +773,8 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.transformer = GPT2Model(config)
+        self.transformer1 = GPT2Model(config)
+        self.transformer2 = GPT2Model(config)
         self.qa_outputs = nn.Linear(config.n_embd, config.num_labels)
 
         self.init_weights()
@@ -792,7 +793,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
             end_positions=None,
             use_cache=True,
     ):
-        transformer_outputs = self.transformer(
+        transformer_outputs1 = self.transformer1(
             input_ids,
             past=past,
             attention_mask=attention_mask,
@@ -803,14 +804,25 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
             use_cache=use_cache,
         )
 
-        hidden_states = transformer_outputs[0]
-
-        logits = self.qa_outputs(hidden_states)
+        hidden_states1 = transformer_outputs1[0]
+        inputs_embeds2 = (self.transformer2.get_input_embeddings()(input_ids)
+                          + hidden_states1)
+        transformer_outputs2 = self.transformer2(
+            past=past,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds2,
+            use_cache=use_cache,
+        )
+        hidden_states2 = transformer_outputs2[0]
+        logits = self.qa_outputs(hidden_states2)
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
-        outputs = (start_logits, end_logits,) + transformer_outputs[2:]
+        outputs = (start_logits, end_logits,) + transformer_outputs2[2:]
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
