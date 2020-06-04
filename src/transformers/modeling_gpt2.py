@@ -851,5 +851,5 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         logging.info("copying parameters from self.transformer to self.transformer2")
         named_params = dict(model.transformer.named_parameters())
         for name, param in model.transformer2.named_parameters():
-            param[:] = named_params[name]
+            param.detach()[:] = named_params[name].detach()
         return model
