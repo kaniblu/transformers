@@ -773,7 +773,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.transformer1 = GPT2Model(config)
+        self.transformer = GPT2Model(config)
         self.transformer2 = GPT2Model(config)
         self.qa_outputs = nn.Linear(config.n_embd, config.num_labels)
 
@@ -793,7 +793,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
             end_positions=None,
             use_cache=True,
     ):
-        transformer_outputs1 = self.transformer1(
+        transformer_outputs1 = self.transformer(
             input_ids,
             past=past,
             attention_mask=attention_mask,
@@ -841,3 +841,15 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), start_logits, end_logits, presents, (all hidden_states), (attentions)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        model = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        if not isinstance(model, cls):
+            return model
+        # copy loaded parameters to the second transformer
+        logging.info("copying parameters from self.transformer to self.transformer2")
+        named_params = dict(model.transformer.named_parameters())
+        for name, param in model.transformer2.named_parameters():
+            param[:] = named_params[name]
+        return model
