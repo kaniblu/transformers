@@ -273,9 +273,6 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
-    def prepare_for_tokenization(self, text, **kwargs):
-        return " " + text.lstrip()
-
     def build_inputs_with_special_tokens(
             self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
