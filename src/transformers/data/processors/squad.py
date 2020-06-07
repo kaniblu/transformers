@@ -26,17 +26,28 @@ logger = logging.getLogger(__name__)
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer, orig_answer_text):
     """Returns tokenized answer spans that better match the annotated answer."""
     tok_answer_text = {
-        " ".join(tokenizer.tokenize(orig_answer_text)),
-        " ".join(tokenizer.tokenize(orig_answer_text, add_prefix_space=True))
+        " ".join(tokenizer.tokenize(orig_answer_text.strip())),
+        " ".join(tokenizer.tokenize(" " + orig_answer_text.strip()))
     }
 
-    for new_start in range(input_start, input_end + 1):
-        for new_end in range(input_end, new_start - 1, -1):
-            text_span = " ".join(doc_tokens[new_start : (new_end + 1)])
-            if text_span in tok_answer_text:
-                return (new_start, new_end)
+    def search_maximal(start, end):
+        for new_start in range(end, start - 1, -1):
+            for new_end in range(new_start, end + 1):
+                text_span = " ".join(doc_tokens[new_start : (new_end + 1)])
+                if any(answer_text in text_span for answer_text in tok_answer_text):
+                    return new_start, new_end
 
-    return (input_start, input_end)
+    def search_minimal(start, end):
+        for new_start in range(start, end + 1):
+            for new_end in range(end, new_start - 1, -1):
+                text_span = " ".join(doc_tokens[new_start : (new_end + 1)])
+                if any(text_span in answer_text for answer_text in tok_answer_text):
+                    return new_start, new_end
+
+    ret = search_maximal(input_start, input_end)
+    if ret is not None:
+        return ret
+    return input_start, input_end
 
 
 def _check_is_max_context(doc_spans, cur_span_index, position):
@@ -106,7 +117,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
     all_doc_tokens = []
     for (i, token) in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
-        sub_tokens = tokenizer.tokenize(token.strip(), add_prefix_space=True)
+        sub_tokens = tokenizer.tokenize(" " + token.strip(), add_prefix_space=True)
         for sub_token in sub_tokens:
             tok_to_orig_index.append(i)
             all_doc_tokens.append(sub_token)
